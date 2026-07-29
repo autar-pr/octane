@@ -152,14 +152,10 @@ export async function setup(project: TestProject): Promise<void> {
 
 export async function teardown(): Promise<void> {
 	// A cancelled run can land here with the build still going; settle the chain
-	// first so it cannot spawn a server after we have torn one down.
-	if (build?.pid !== undefined) {
-		try {
-			process.kill(-build.pid, 'SIGTERM');
-		} catch {
-			build.kill('SIGTERM');
-		}
-	}
+	// first so it cannot spawn a server after we have torn one down. Same
+	// SIGTERM→SIGKILL path as the preview server — SIGTERM alone can leave a
+	// detached pnpm/vite tree alive past Vitest's teardown budget.
+	await stopServer(build);
 	await ready?.catch(() => {});
 	await stopServer(server);
 	server = undefined;
