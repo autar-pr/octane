@@ -2589,6 +2589,10 @@ export default defineConfig({
 					// serially, on an unloaded runner. That matters: the spec renders the
 					// whole documentation graph (see testTimeout) and is exactly the kind
 					// of case a saturated shard turns into a spurious timeout.
+					//
+					// website-integration's production build no longer blocks globalSetup,
+					// so this project's docs spec waits on that build's marker before
+					// mounting (see core-apis-docs.test.ts) instead of racing `vite build`.
 					exclude: [
 						'website/tests/ssr-smoke.test.ts',
 						'website/tests/ssr-hydration.e2e.test.ts',

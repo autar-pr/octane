@@ -43,9 +43,13 @@
 // the specs their origin, starts build→serve, and returns immediately. The two
 // server-backed specs wait for readiness in their own beforeAll, so the other
 // projects' tests run during the build instead of behind it.
+//
+// Exception: core-apis-docs (website-unit) is contention-sensitive and shares
+// the website_e2e job with this project. setup() writes a build marker so that
+// spec can wait without inject()-ing this project's ProvidedContext.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,6 +59,7 @@ import {
 	spawnServer,
 	stopServer,
 	waitForServer,
+	websiteProductionBuildMarkerPath,
 	writeReadyState,
 } from '../support/server-process.ts';
 
@@ -80,6 +85,7 @@ let server: ChildProcess | undefined;
 let build: ChildProcess | undefined;
 let ready: Promise<void> | undefined;
 let readyFile: string | undefined;
+let buildMarker: string | undefined;
 
 function buildWebsite(): Promise<void> {
 	return new Promise((resolve, reject) => {
@@ -108,6 +114,10 @@ export async function setup(project: TestProject): Promise<void> {
 	const reservation = await reserveFreePort();
 	const origin = `http://localhost:${reservation.port}`;
 	readyFile = join(tmpdir(), `octane-website-ready-${process.pid}-${reservation.port}.json`);
+	// Published BEFORE returning so website-unit's docs spec can notice the
+	// in-flight build even though it cannot inject() this project's context.
+	buildMarker = websiteProductionBuildMarkerPath(process.pid);
+	await writeFile(buildMarker, readyFile, 'utf8');
 
 	// Provided BEFORE the work completes. These are static facts (a port we hold,
 	// a path we control), so the specs can be handed them immediately; what they
@@ -167,4 +177,6 @@ export async function teardown(): Promise<void> {
 	ready = undefined;
 	if (readyFile) await rm(readyFile, { force: true }).catch(() => {});
 	readyFile = undefined;
+	if (buildMarker) await rm(buildMarker, { force: true }).catch(() => {});
+	buildMarker = undefined;
 }

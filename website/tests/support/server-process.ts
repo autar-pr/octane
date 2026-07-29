@@ -6,6 +6,8 @@
 // their own copy.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readFile, rename, writeFile } from 'node:fs/promises';
 
 // A fresh ephemeral port per run — NEVER a fixed one. With a fixed port, a
@@ -83,6 +85,36 @@ export async function waitForReadyState(readyFile: string, timeoutMs: number): P
 			throw new Error(`website production server was not ready within ${timeoutMs}ms`);
 		}
 		await new Promise((r) => setTimeout(r, 250));
+	}
+}
+
+// Marker written by website-integration's globalSetup while its background
+// build→serve chain is still in flight. Contents are the absolute ready-file
+// path the chain will eventually settle. Specs outside that project (notably
+// core-apis-docs) cannot inject() its ProvidedContext, so they discover the
+// build through this file instead.
+export function websiteProductionBuildMarkerPath(mainPid: number): string {
+	return join(tmpdir(), `octane-website-building-${mainPid}`);
+}
+
+// No-op when website-integration is not part of the run. When it is, wait until
+// its background production build finishes so a CPU-heavy jsdom mount cannot
+// race `vite build` on the same machine (website_e2e runs both under
+// maxWorkers=1; the docs case is the one that timed out under that contention).
+export async function waitForProductionBuildIfRunning(timeoutMs: number): Promise<void> {
+	// globalSetup runs in the Vitest main process. Fork-pool workers see it as
+	// `ppid`; worker_threads share `pid` with the main process.
+	for (const pid of new Set([process.ppid, process.pid])) {
+		let readyFile: string | undefined;
+		try {
+			readyFile = (await readFile(websiteProductionBuildMarkerPath(pid), 'utf8')).trim();
+		} catch {
+			continue;
+		}
+		if (readyFile) {
+			await waitForReadyState(readyFile, timeoutMs);
+			return;
+		}
 	}
 }
 

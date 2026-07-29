@@ -2,11 +2,17 @@
 // the route's learning structure, local navigation, and real interactive
 // examples so the unusually large page does not need duplicate generic smoke
 // coverage.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, waitFor, within } from '@octanejs/testing-library';
 import { RouterProvider, createMemoryHistory } from '@octanejs/tanstack-router';
 import { getRouter } from '../src/router.ts';
 import { docs } from '../src/content/docs.ts';
+import { waitForProductionBuildIfRunning } from './support/server-process.ts';
+
+// website-integration may be building the site in the background for the same
+// Vitest run (website_e2e includes both). Wait so this mount does not share the
+// machine with `vite build`. No-op when that project is not participating.
+beforeAll(() => waitForProductionBuildIfRunning(300_000), 320_000);
 
 afterEach(cleanup);
 
